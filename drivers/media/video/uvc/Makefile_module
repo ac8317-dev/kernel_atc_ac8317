@@ -1,0 +1,15 @@
+TARGET=sonix_uvcvideo
+KDIR:=/lib/modules/$(shell uname -r)/build
+PWD:=$(shell pwd)
+
+CCFLAGS += -I/usr/include/
+
+$(TARGET)-objs  := uvc_driver.o uvc_queue.o uvc_v4l2.o uvc_video.o uvc_ctrl.o \
+		  uvc_status.o uvc_isight.o uvc_debugfs.o nalu.o
+
+obj-m:=$(TARGET).o
+
+default:
+	make $(CCFLAGS) -C $(KDIR) M=$(PWD) modules
+clean:
+	rm -rf *.o *.ko *.mod.* modules.* Module.* .tmp_versions .*.*.cmd

@@ -1,0 +1,15 @@
+
+
+#if ! defined(CHIP_VER_H)
+#define CHIP_VER_H
+
+#define CONFIG_CHIP_VER_AC83XX 3360
+
+#ifdef CONFIG_ARCH_AC83XX
+#define CONFIG_CHIP_VER_CURR CONFIG_CHIP_VER_AC83XX
+#endif
+
+#define CONFIG_AC83XX_FPGA 0
+
+#endif //CHIP_VER_H
+

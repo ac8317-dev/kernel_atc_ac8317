@@ -1,0 +1,279 @@
+/*
+ * drivers/usb/generic.c - generic driver for USB devices (not interfaces)
+ *
+ * (C) Copyright 2005 Greg Kroah-Hartman <gregkh@suse.de>
+ *
+ * based on drivers/usb/usb.c which had the following copyrights:
+ *	(C) Copyright Linus Torvalds 1999
+ *	(C) Copyright Johannes Erdfelt 1999-2001
+ *	(C) Copyright Andreas Gal 1999
+ *	(C) Copyright Gregory P. Smith 1999
+ *	(C) Copyright Deti Fliegl 1999 (new USB architecture)
+ *	(C) Copyright Randy Dunlap 2000
+ *	(C) Copyright David Brownell 2000-2004
+ *	(C) Copyright Yggdrasil Computing, Inc. 2000
+ *		(usb_device_id matching changes by Adam J. Richter)
+ *	(C) Copyright Greg Kroah-Hartman 2002-2003
+ *
+ */
+
+#include <linux/usb.h>
+#include <linux/usb/hcd.h>
+#include "usb.h"
+
+static inline const char *plural(int n)
+{
+	return (n == 1 ? "" : "s");
+}
+
+static int is_rndis(struct usb_interface_descriptor *desc)
+{
+	return desc->bInterfaceClass == USB_CLASS_COMM
+		&& desc->bInterfaceSubClass == 2
+		&& desc->bInterfaceProtocol == 0xff;
+}
+
+static int is_activesync(struct usb_interface_descriptor *desc)
+{
+	return desc->bInterfaceClass == USB_CLASS_MISC
+		&& desc->bInterfaceSubClass == 1
+		&& desc->bInterfaceProtocol == 1;
+}
+
+int usb_choose_configuration(struct usb_device *udev)
+{
+	int i;
+	int num_configs;
+	int insufficient_power = 0;
+	bool fgaudioclass = false;
+	bool fghidclass = false;
+	bool fgIpodOverUsb = (udev != NULL &&  udev->descriptor.idVendor == 0x05AC && (udev->descriptor.idProduct >> 8) == 0x12) ;
+
+	struct usb_host_config *c, *best;
+
+	best = NULL;
+	c = udev->config;
+	num_configs = udev->descriptor.bNumConfigurations;
+	for (i = 0; i < num_configs; (i++, c++)) {
+		struct usb_interface_descriptor	*desc = NULL;
+
+		/* It's possible that a config has no interfaces! */
+		if (c->desc.bNumInterfaces > 0)   // 如果当前配置下有接口，则选择得到接口0中接口设置0的接口描述符
+			desc = &c->intf_cache[0]->altsetting->desc;
+
+		/*
+		 * HP's USB bus-powered keyboard has only one configuration
+		 * and it claims to be self-powered; other devices may have
+		 * similar errors in their descriptors.  If the next test
+		 * were allowed to execute, such configurations would always
+		 * be rejected and the devices would not work as expected.
+		 * In the meantime, we run the risk of selecting a config
+		 * that requires external power at a time when that power
+		 * isn't available.  It seems to be the lesser of two evils.
+		 *
+		 * Bugzilla #6448 reports a device that appears to crash
+		 * when it receives a GET_DEVICE_STATUS request!  We don't
+		 * have any other way to tell whether a device is self-powered,
+		 * but since we don't use that information anywhere but here,
+		 * the call has been removed.
+		 *
+		 * Maybe the GET_DEVICE_STATUS call and the test below can
+		 * be reinstated when device firmwares become more reliable.
+		 * Don't hold your breath.
+		 */
+#if 0
+		/* Rule out self-powered configs for a bus-powered device */
+		if (bus_powered && (c->desc.bmAttributes &
+					USB_CONFIG_ATT_SELFPOWER))
+			continue;
+#endif
+
+		/*
+		 * The next test may not be as effective as it should be.
+		 * Some hubs have errors in their descriptor, claiming
+		 * to be self-powered when they are really bus-powered.
+		 * We will overestimate the amount of current such hubs
+		 * make available for each port.
+		 *
+		 * This is a fairly benign sort of failure.  It won't
+		 * cause us to reject configurations that we should have
+		 * accepted.
+		 */
+
+		/* Rule out configs that draw too much bus current */
+		if (c->desc.bMaxPower * 2 > udev->bus_mA) {  //  判断当前usb设备从hub上可以获得的电流是滞能够满足当前配置，如果不能满足则选择下一个配置
+			insufficient_power++;
+			continue;
+		}
+
+		/* When the first config's first interface is one of Microsoft's
+		 * pet nonstandard Ethernet-over-USB protocols, ignore it unless
+		 * this kernel has enabled the necessary host side driver.
+		 * But: Don't ignore it if it's the only config.
+		 */  // 对于一些micsoft公司喜欢的非标准设备配置，除非指定说需要，否则不考虑这些配置
+		if (i == 0 && num_configs > 1 && desc &&  
+				(is_rndis(desc) || is_activesync(desc))) {
+#if !defined(CONFIG_USB_NET_RNDIS_HOST) && !defined(CONFIG_USB_NET_RNDIS_HOST_MODULE)
+			continue;
+#else
+			best = c;
+#endif
+		}
+
+		/* From the remaining configs, choose the first one whose
+		 * first interface is for a non-vendor-specific class.
+		 * Reason: Linux is more likely to have a class driver
+		 * than a vendor-specific driver. */
+		else if (udev->descriptor.bDeviceClass !=          //   选择非生产产家规定类的配置比由生产产家规定类的配置更合适
+						USB_CLASS_VENDOR_SPEC &&
+				(desc && desc->bInterfaceClass !=
+						USB_CLASS_VENDOR_SPEC) &&
+				!fgIpodOverUsb) {
+			best = c;
+			break;
+		}
+		else if (fgIpodOverUsb)
+		{
+		    int i = 0;
+		    for(; i < c->desc.bNumInterfaces; i ++)
+		    {
+		        if(c->intf_cache[i]->altsetting->desc.bInterfaceClass == USB_CLASS_HID)
+		        {
+		            fghidclass = true;
+		        }
+		        if(c->intf_cache[i]->altsetting->desc.bInterfaceClass == USB_CLASS_AUDIO)
+		        {
+		            fgaudioclass = true;
+		        }	
+		        if(fghidclass && fgaudioclass)	     
+		        {		            
+		            best = c;
+		            if(best)
+		            {
+		                printk("ipod over usb feature enable");
+		                return best->desc.bConfigurationValue;
+		            }
+		        }   
+		    }
+		}
+
+		/* If all the remaining configs are vendor-specific,
+		 * choose the first one. */
+		else if (!best)   //    如果只有生产 产家规定类的配置，那么选择这睦配置中的第一个配置
+			best = c;
+	}
+
+	if (insufficient_power > 0)   //   如果这些配置中所需要的电流比较从hub上获得的允许值大，就会发出警告
+		dev_info(&udev->dev, "rejected %d configuration%s "
+			"due to insufficient available bus power\n",
+			insufficient_power, plural(insufficient_power));
+	
+   //   选择好合适 的配置值后，函数usb_choose_configuration返回
+	if (best) {
+		i = best->desc.bConfigurationValue;
+		dev_dbg(&udev->dev,
+			"configuration #%d chosen from %d choice%s\n",
+			i, num_configs, plural(num_configs));
+	} else {
+		i = -1;
+		dev_warn(&udev->dev,
+			"no configuration chosen from %d choice%s\n",
+			num_configs, plural(num_configs));
+	}
+	return i;
+}
+/**********
+generic_probe函数由三部分程序构成：第一是由usb_choose_configuration选择一个适合的usb配置；
+                                   第二是根据选择得到的配置值配置usb设备；
+                                   第三是如果系统支持usb class类设备文件系统，则在/sys/usb_device/下创建usb设备的设备属性文件
+                           ************/
+static int generic_probe(struct usb_device *udev)
+{
+	int err, c;
+
+	/* Choose and set the configuration.  This registers the interfaces
+	 * with the driver core and lets interface drivers bind to them.
+	 */
+	if (usb_device_is_owned(udev))
+		;		/* Don't configure if the device is owned */
+	else if (udev->authorized == 0)
+		dev_err(&udev->dev, "Device is not authorized for usage\n");
+	else {
+		c = usb_choose_configuration(udev);  //  由usb_choose_configuration选择一个适合的usb配置 
+		if (c >= 0) {   //   //设置配置,并注册interface. 
+			err = usb_set_configuration(udev, c);   //  如果得到了合适的配置值，则通过usb_set_configuration将这个值对usb设备进行配置  
+			if (err) {
+				dev_err(&udev->dev, "can't set config #%d, error %d\n",
+					c, err);
+				/* This need not be fatal.  The user can try to
+				 * set other configurations. */
+			}
+		}
+	}
+	/* USB device state == configured ... usable */
+	usb_notify_add_device(udev);
+
+	return 0;
+}
+
+static void generic_disconnect(struct usb_device *udev)
+{
+	usb_notify_remove_device(udev);
+
+	/* if this is only an unbind, not a physical disconnect, then
+	 * unconfigure the device */
+	if (udev->actconfig)
+		usb_set_configuration(udev, -1);
+}
+
+#ifdef	CONFIG_PM
+
+static int generic_suspend(struct usb_device *udev, pm_message_t msg)
+{
+	int rc;
+
+	/* Normal USB devices suspend through their upstream port.
+	 * Root hubs don't have upstream ports to suspend,
+	 * so we have to shut down their downstream HC-to-USB
+	 * interfaces manually by doing a bus (or "global") suspend.
+	 */
+	if (!udev->parent)
+		rc = hcd_bus_suspend(udev, msg);
+
+	/* Non-root devices don't need to do anything for FREEZE or PRETHAW */
+	else if (msg.event == PM_EVENT_FREEZE || msg.event == PM_EVENT_PRETHAW)
+		rc = 0;
+	else
+		rc = usb_port_suspend(udev, msg);
+
+	return rc;
+}
+
+static int generic_resume(struct usb_device *udev, pm_message_t msg)
+{
+	int rc;
+
+	/* Normal USB devices resume/reset through their upstream port.
+	 * Root hubs don't have upstream ports to resume or reset,
+	 * so we have to start up their downstream HC-to-USB
+	 * interfaces manually by doing a bus (or "global") resume.
+	 */
+	if (!udev->parent)
+		rc = hcd_bus_resume(udev, msg);
+	else
+		rc = usb_port_resume(udev, msg);
+	return rc;
+}
+
+#endif	/* CONFIG_PM */
+
+struct usb_device_driver usb_generic_driver = {
+	.name =	"usb",
+	.probe = generic_probe,
+	.disconnect = generic_disconnect,
+#ifdef	CONFIG_PM
+	.suspend = generic_suspend,
+	.resume = generic_resume,
+#endif
+	.supports_autosuspend = 1,
+};

@@ -1,0 +1,47 @@
+if ARCH_MT33XX
+
+menu "MediaTek MT33xx System-on-Chip"
+
+choice
+	prompt "MediaTek MT33xx Processor"
+
+config ARCH_MT8520
+	bool "MT8520"
+
+config ARCH_MT8530
+	bool "MT8530"
+
+config ARCH_MT8550
+	bool "MT8550"
+
+config ARCH_MT8555
+	bool "MT8555"
+
+config ARCH_MT8560
+	bool "MT8560"
+
+config ARCH_MT8580
+	bool "MT8580"
+
+config ARCH_MT3360
+	bool "MT3360"
+
+endchoice
+
+endmenu
+
+config MTK_WIN32_SUPPORT
+	int 	
+	depends on ARCH_MT33XX
+	default 1
+
+config HZ
+	int
+	depends on ARCH_MT33XX
+	default 1000
+	
+config DVP_RESERVED_MEM
+	bool
+	default y
+
+endif

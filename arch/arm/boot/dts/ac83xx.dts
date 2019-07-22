@@ -1,0 +1,100 @@
+/dts-v1/;
+
+
+/include/ "skeleton.dtsi"
+
+/ {
+	compatible = "Autochips,ac83xx";
+	interrupt-parent = <&intc>;
+	#address-cells = <1>;
+	#size-cells = <1>;
+	
+	
+  cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a7";
+			reg = <0>;
+		};
+
+		cpu@1 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a7";
+			reg = <1>;
+		};
+
+		cpu@2 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a7";
+			reg = <2>;
+		};
+
+		cpu@3 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a7";
+			reg = <3>;
+		};
+
+	};
+
+	timer {
+		compatible = "arm,armv7-timer";
+		interrupts =
+			<1 13
+				3848>,
+			<1 14
+				3848>,
+			<1 11
+				3848>,
+			<1 10
+				3848>;
+		clock-frequency = <6750000>;
+	};	
+	
+	chosen {
+	bootargs = "root=/dev/ram0 rw initrd=0x07000000,0x200000 init=/init console=ttyMT0 nohlt loglevel=8 user_debug=31 no_console_suspend vmalloc=400M";
+		/********
+		* bootargs = "root=/dev/ram0 rw initrd=0x07000000,0x200000 init=/init console=ttyMT0 mem=370M nohlt loglevel=8 user_debug=31 parts=0x400000@0x0(boot)0,0x200000@0x400000(env)0,0x200000@0x600000(arm2)0,0x400000@0x800000(logo)0,0x400000@0xc00000(kernel)0,0x200000@0x1000000(rootfs)0,300M@0x1200000(system)1,300M@0x13E00000(data)1,100M@0x26A00000(cache)1,300M@0x2CE00000(swap)0,0x400000@0x3FA00000(recovery)0,0x200000@0x3FE00000(misc)0,0x3200000@0x40000000(backup)0,0x400000@0x43200000(metazone)0,0x400000@0x43600000(dvp)0,300M@0x43a00000(data4write)1,-(usrdata)1";
+		********/
+	};
+	
+	
+	memory {
+		reg = <0x01000000 0xEF00000
+			0x19A00000 0x26600000>;
+	};
+	
+	
+	intc: interrupt-controller {
+		compatible = "arm,cortex-a15-gic";
+		reg = <0xf1001000 0x1000
+		       0xf1002000 0x1000>;
+		interrupt-controller;
+		#interrupt-cells = <3>;
+	};
+
+	timer@f0008148 {
+		compatible = "Autochips,ac83xx-timer";
+		reg = <0xf0008148 0x20>;
+		interrupts = <0 57 4>,
+			     <0 58 4>,
+			     <0 59 4>;
+
+	 };
+	 
+	 serial@f000c000 {
+	   compatible = "Autochips,ac83xx-serial";
+	   reg = <0xf000c000 0x1000>;
+	   interrupts = <0 46 4>;
+	 };
+	 
+	 extint@f0008740 {
+	   compatible = "Autochips,ac83xx-extint";
+	   reg = <0xf0008740 0x10>;
+	   interrupts = <0 35 4>;
+	 };
+	
+};

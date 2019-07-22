@@ -1,0 +1,35 @@
+if ARCH_AC83XX
+
+menu "Autochips AC83XX System-on-Chip"
+
+comment "AC83XX Board Type"
+
+config MACH_AC83XXFPGA
+    bool "AC83XX FPGA"
+	depends on ARCH_AC83XX
+	help
+	  select this if you are using V6x2 FPGA board
+
+config MACH_AC83XX
+    bool "AC83XX RealChip"
+	depends on ARCH_AC83XX
+	help
+	  select this if you are using AC83XX EVB board
+
+endmenu
+
+config MTK_WIN32_SUPPORT
+	int 	
+	depends on ARCH_AC83XX
+	default 1
+
+config HZ
+	int
+	depends on ARCH_AC83XX
+	default 1000
+	
+config DVP_RESERVED_MEM
+	bool
+	default y
+
+endif
